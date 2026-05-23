@@ -1,0 +1,275 @@
+.detailPage {
+  min-height: 100vh;
+  padding: 32px 28px 56px;
+  background: #f7f8fa;
+}
+
+.topPanel {
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+  padding: 30px;
+  border-radius: 6px;
+  background: #ffffff;
+  box-shadow: 0 4px 14px rgba(20, 35, 64, 0.05);
+}
+
+.titleBlock {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.source {
+  color: #999999;
+  font-size: 22px;
+  line-height: 1.4;
+}
+
+.detailTitle {
+  display: block;
+  color: #333333;
+  font-size: 34px;
+  font-weight: 700;
+  line-height: 1.45;
+  white-space: normal;
+  word-break: break-word;
+  overflow: visible;
+}
+
+.articleMetaPanel {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  width: 100%;
+}
+
+.scoreRing {
+  flex: none;
+  width: 112px;
+  height: 112px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+}
+
+.sourceButton {
+  flex: none;
+  min-width: 160px;
+  height: 58px;
+  margin: 0;
+  padding: 0 22px;
+  border: 1px solid #1a56db;
+  border-radius: 6px;
+  background: #ffffff;
+  color: #1a56db;
+  font-size: 24px;
+  line-height: 56px;
+}
+
+.sourceButton::after {
+  border: 0;
+}
+
+.sourcePanel {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-top: 18px;
+  border-top: 1px solid #e5e7eb;
+}
+
+.sourceLabel {
+  color: #999999;
+  font-size: 22px;
+}
+
+.sourceUrl {
+  color: #1a56db;
+  font-size: 22px;
+  line-height: 1.45;
+  word-break: break-all;
+}
+
+.scoreInner {
+  width: 86px;
+  height: 86px;
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  border-radius: 50%;
+  background: #ffffff;
+}
+
+.scoreValue {
+  color: #1a56db;
+  font-size: 34px;
+  font-weight: 800;
+  line-height: 86px;
+}
+
+.scoreUnit {
+  color: #999999;
+  font-size: 18px;
+}
+
+.summaryPanel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 20px;
+  padding: 28px;
+  border-left: 6px solid #1a56db;
+  border-radius: 6px;
+  background: #ffffff;
+}
+
+.analysisHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+}
+
+.analyzeButton {
+  flex: none;
+  min-width: 156px;
+  height: 56px;
+  margin: 0;
+  padding: 0 20px;
+  border: 0;
+  border-radius: 6px;
+  background: #1a56db;
+  color: #ffffff;
+  font-size: 24px;
+  line-height: 56px;
+}
+
+.analyzeButton::after {
+  border: 0;
+}
+
+.sectionLabel {
+  color: #999999;
+  font-size: 22px;
+}
+
+.coreSummary {
+  color: #333333;
+  font-size: 30px;
+  font-weight: 700;
+  line-height: 1.45;
+}
+
+.publicPanel,
+.bankerPanel {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  margin-top: 20px;
+  padding: 30px;
+  border-radius: 6px;
+}
+
+.publicPanel {
+  background: #eaf2ff;
+}
+
+.bankerPanel {
+  background: #333333;
+}
+
+.panelTitle {
+  color: #1a56db;
+  font-size: 26px;
+  font-weight: 700;
+}
+
+.panelContent {
+  color: #174ea6;
+  font-size: 26px;
+  line-height: 1.65;
+}
+
+.bankerTitle {
+  color: #f2f4f8;
+  font-size: 26px;
+  font-weight: 700;
+}
+
+.bankerContent {
+  color: #d8dee9;
+  font-size: 26px;
+  line-height: 1.65;
+}
+
+.keywords {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 20px;
+}
+
+.keyword {
+  padding: 8px 14px;
+  border: 1px solid #d8dee9;
+  border-radius: 4px;
+  background: #ffffff;
+  color: #666666;
+  font-size: 22px;
+}
+
+.rawSection {
+  margin-top: 28px;
+  border-top: 1px solid #e5e7eb;
+}
+
+.rawHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 24px 0;
+}
+
+.rawTitle {
+  color: #333333;
+  font-size: 26px;
+  font-weight: 700;
+}
+
+.rawToggle {
+  color: #1a56db;
+  font-size: 24px;
+}
+
+.rawContent {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  max-width: 760px;
+  margin: 0 auto;
+  padding-bottom: 20px;
+  color: #666666;
+  opacity: 0.78;
+}
+
+.rawParagraph {
+  display: block;
+  color: #555555;
+  font-size: 25px;
+  line-height: 1.6;
+  text-align: justify;
+  word-break: break-word;
+  white-space: pre-wrap;
+}
+
+.empty {
+  padding: 96px 0;
+  color: #999999;
+  font-size: 26px;
+  text-align: center;
+}

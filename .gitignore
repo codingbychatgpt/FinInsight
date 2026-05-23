@@ -1,0 +1,32 @@
+# Secrets and local environment
+.env
+*.env
+!*.env.example
+api_ds.txt
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# Node
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Build outputs
+dist/
+build/
+.swc/
+
+# Local runtime output
+run-logs/
+.codex/
+
+# Editor and OS files
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
