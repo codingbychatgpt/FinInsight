@@ -1,8 +1,27 @@
+html,
+body,
+#app {
+  width: 100%;
+  min-height: 100%;
+  margin: 0;
+}
+
+body {
+  overflow-x: hidden;
+}
+
+page,
+taro-page-core {
+  display: block;
+  width: 100%;
+  min-height: 100%;
+  background: #060814;
+  color: #e5edf7;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
 page {
   min-height: 100%;
-  background: #f7f8fa;
-  color: #333333;
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 }
 
 view,

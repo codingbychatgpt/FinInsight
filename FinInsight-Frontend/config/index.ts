@@ -5,11 +5,6 @@ export default defineConfig(async () => {
     projectName: 'FinInsight-Frontend',
     date: '2026-05-21',
     designWidth: 750,
-    deviceRatio: {
-      640: 2.34 / 2,
-      750: 1,
-      828: 1.81 / 2
-    },
     sourceRoot: 'src',
     outputRoot: 'dist',
     plugins: [
@@ -23,10 +18,14 @@ export default defineConfig(async () => {
     },
     framework: 'react',
     compiler: 'webpack5',
-    mini: {},
     h5: {
       publicPath: '/',
       staticDirectory: 'static',
+      postcss: {
+        pxtransform: {
+          enable: false
+        }
+      },
       devServer: {
         port: 10086,
         host: '127.0.0.1'
