@@ -1,7 +1,9 @@
 # Secrets and local environment
 .env
 *.env
+.env.*
 !*.env.example
+!*.env.production.example
 api_ds.txt
 
 # Python
@@ -20,6 +22,7 @@ yarn-error.log*
 dist/
 build/
 .swc/
+fininsight-upload.tar.gz
 
 # Local runtime output
 run-logs/

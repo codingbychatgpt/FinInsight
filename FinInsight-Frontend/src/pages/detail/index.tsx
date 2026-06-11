@@ -1,11 +1,21 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import Taro from '@tarojs/taro'
 import { Button, Text, View } from '@tarojs/components'
 
-import { analyzeArticle, ArticleItem } from '../../api'
+import { analyzeArticle, askArticleQuestion, ArticleItem, getArticle } from '../../api'
 import { getCurrentArticle, setCurrentArticle } from '../../store/article'
 
 import './index.scss'
+
+type ChatMessage = {
+  id: string
+  role: 'user' | 'assistant'
+  content: string
+}
+
+function createMessageId(): string {
+  return `${Date.now()}-${Math.random().toString(36).slice(2)}`
+}
 
 function formatDate(value: string): string {
   if (!value) {
@@ -22,7 +32,10 @@ function formatDate(value: string): string {
   ).padStart(2, '0')}`
 }
 
-function getScoreLevel(score: number): string {
+function getScoreLevel(score: number, evaluated = true): string {
+  if (!evaluated) {
+    return 'unevaluated'
+  }
   if (score >= 8) {
     return 'high'
   }
@@ -32,7 +45,10 @@ function getScoreLevel(score: number): string {
   return 'low'
 }
 
-function getRiskLabel(score: number): string {
+function getRiskLabel(score: number, evaluated = true): string {
+  if (!evaluated) {
+    return '未评估'
+  }
   if (score >= 8) {
     return '高冲击'
   }
@@ -42,9 +58,75 @@ function getRiskLabel(score: number): string {
   return '低波动'
 }
 
+function renderPerspectiveContent(content: string, active: boolean) {
+  const lead = content.slice(0, 1)
+  const rest = content.slice(1)
+
+  return (
+    <Text className={active ? 'panelContent' : 'bankerContent'}>
+      {lead ? <Text className={`leadChar ${active ? 'leadCharActive' : 'leadCharMuted'}`}>{lead}</Text> : null}
+      {rest}
+    </Text>
+  )
+}
+
+function isAnalysisFailed(article: ArticleItem): boolean {
+  return (
+    article.status === 'failed' ||
+    article.interpretation.core_summary === '解析失败' ||
+    article.interpretation.keywords.includes('解析失败')
+  )
+}
+
 export default function DetailPage() {
   const [analyzing, setAnalyzing] = useState<boolean>(false)
   const [article, setArticle] = useState<ArticleItem | null>(() => getCurrentArticle())
+  const [leaving, setLeaving] = useState<boolean>(false)
+  const [activePerspective, setActivePerspective] = useState<'public' | 'banker'>('public')
+  const [chatQuestion, setChatQuestion] = useState<string>('')
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([])
+  const [asking, setAsking] = useState<boolean>(false)
+  const [loadingArticle, setLoadingArticle] = useState<boolean>(() => getCurrentArticle() === null)
+
+  useEffect(() => {
+    if (article) {
+      setLoadingArticle(false)
+      return
+    }
+
+    const articleId = Taro.getCurrentInstance().router?.params?.id
+    if (!articleId) {
+      setLoadingArticle(false)
+      return
+    }
+
+    let active = true
+    getArticle(articleId)
+      .then((loadedArticle) => {
+        if (!active) {
+          return
+        }
+        setCurrentArticle(loadedArticle)
+        setArticle(loadedArticle)
+      })
+      .catch(() => {
+        if (active) {
+          Taro.showToast({
+            title: '文章加载失败，请返回主页重试',
+            icon: 'none'
+          })
+        }
+      })
+      .finally(() => {
+        if (active) {
+          setLoadingArticle(false)
+        }
+      })
+
+    return () => {
+      active = false
+    }
+  }, [article])
 
   const goHome = () => {
     Taro.reLaunch({
@@ -52,26 +134,28 @@ export default function DetailPage() {
     })
   }
 
+  const goBack = () => {
+    setLeaving(true)
+    setTimeout(() => {
+      goHome()
+    }, 180)
+  }
+
   if (!article) {
     return (
-      <View className='detailPage'>
+      <View className={`detailPage ${leaving ? 'detailPageLeaving' : ''}`}>
+        <Button className='backButton' onClick={goBack}>&lt; 返回</Button>
         <View className='empty'>
-          <Text>未找到文章数据，请返回列表重新进入</Text>
-          <Button className='homeButton' onClick={goHome}>返回主页</Button>
+          <Text>{loadingArticle ? '正在加载文章...' : '未找到文章数据，请返回列表重新进入'}</Text>
         </View>
       </View>
     )
   }
 
   const score = Math.max(0, Math.min(10, article.interpretation.impact_score))
-  const scoreDeg = `${score * 36}deg`
-  const scoreLevel = getScoreLevel(score)
-  const hasAnalyzed = article.status === 'parsed' && score > 0
-  const keywordCount = article.interpretation.keywords.length
-  const rawLength = article.raw_content.length
-  const bankerLength = article.interpretation.banker_perspective.length
-  const publicLength = article.interpretation.public_perspective.length
-  const articleCode = String(article.id || article.article_id || 'NA').slice(0, 10)
+  const evaluated = article.status === 'parsed'
+  const scoreDeg = `${evaluated ? score * 36 : 0}deg`
+  const scoreLevel = getScoreLevel(score, evaluated)
 
   const handleAnalyze = async () => {
     setAnalyzing(true)
@@ -79,6 +163,14 @@ export default function DetailPage() {
       const nextArticle = await analyzeArticle(article.id)
       setCurrentArticle(nextArticle)
       setArticle(nextArticle)
+      if (isAnalysisFailed(nextArticle)) {
+        Taro.showToast({
+          title: '解析失败，请检查模型 API 或网络',
+          icon: 'none'
+        })
+        return
+      }
+
       Taro.showToast({
         title: '解析完成',
         icon: 'success'
@@ -105,10 +197,53 @@ export default function DetailPage() {
     })
   }
 
+  const handleAskQuestion = async () => {
+    const question = chatQuestion.trim()
+    if (!question || asking) {
+      return
+    }
+
+    setChatMessages((messages) => [
+      ...messages,
+      {
+        id: createMessageId(),
+        role: 'user',
+        content: question
+      }
+    ])
+    setChatQuestion('')
+    setAsking(true)
+
+    try {
+      const answer = await askArticleQuestion(article.id, question)
+      setChatMessages((messages) => [
+        ...messages,
+        {
+          id: createMessageId(),
+          role: 'assistant',
+          content: answer || '暂时没有生成有效回答，请稍后重试。'
+        }
+      ])
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'AI问答失败'
+      setChatMessages((messages) => [
+        ...messages,
+        {
+          id: createMessageId(),
+          role: 'assistant',
+          content: message.includes('aborted') ? 'AI问答超时，请换一个更具体的问题后重试。' : 'AI问答暂不可用，请稍后重试。'
+        }
+      ])
+    } finally {
+      setAsking(false)
+    }
+  }
+
   return (
-    <View className={`detailPage detailScore-${scoreLevel}`}>
+    <View className={`detailPage detailScore-${scoreLevel} ${leaving ? 'detailPageLeaving' : ''}`}>
       <View className='detailAmbient detailAmbientOne' />
       <View className='detailAmbient detailAmbientTwo' />
+      <Button className='backButton' onClick={goBack}>&lt; 返回</Button>
 
       <View className='detailLayout'>
         <View className='topPanel'>
@@ -120,44 +255,24 @@ export default function DetailPage() {
             <Text className='detailTitle'>{article.title}</Text>
           </View>
 
-          <View className='metaMatrix'>
-            <View className='metaCell'>
-              <Text className='metaCellLabel'>状态</Text>
-              <Text className='metaCellValue'>{article.status || 'pending'}</Text>
-            </View>
-            <View className='metaCell'>
-              <Text className='metaCellLabel'>编号</Text>
-              <Text className='metaCellValue'>#{articleCode}</Text>
-            </View>
-            <View className='metaCell'>
-              <Text className='metaCellLabel'>标签</Text>
-              <Text className='metaCellValue'>{keywordCount}</Text>
-            </View>
-            <View className='metaCell'>
-              <Text className='metaCellLabel'>原文字符</Text>
-              <Text className='metaCellValue'>{rawLength}</Text>
-            </View>
-          </View>
-
           <View className='articleMetaPanel'>
             <View
               className={`scoreRing scoreRing-${scoreLevel}`}
               style={{ background: `conic-gradient(var(--score-ring-color) ${scoreDeg}, rgba(148, 163, 184, 0.16) 0deg)` }}
             >
               <View className='scoreInner'>
-                <Text className='scoreValue'>{score}</Text>
-                <Text className='scoreUnit'>/10</Text>
+                <Text className={`scoreValue ${evaluated ? '' : 'scorePendingText'}`}>{evaluated ? score : '未评估'}</Text>
+                {evaluated && <Text className='scoreUnit'>/10</Text>}
               </View>
             </View>
-            <Text className='scoreCaption'>Impact Dashboard</Text>
+            <Text className='scoreCaption'>风险评估</Text>
             <View className='riskMeter'>
-              <View className='riskMeterFill' style={{ width: `${score * 10}%` }} />
+              <View className='riskMeterFill' style={{ width: `${evaluated ? score * 10 : 0}%` }} />
             </View>
-            <Text className={`riskLabel riskLabel-${scoreLevel}`}>{getRiskLabel(score)}</Text>
+            <Text className={`riskLabel riskLabel-${scoreLevel}`}>{getRiskLabel(score, evaluated)}</Text>
           </View>
 
           <View className='detailActions'>
-            <Button className='homeButton' onClick={goHome}>返回主页</Button>
             <Button className='sourceButton' onClick={openOriginal}>查看原文</Button>
           </View>
         </View>
@@ -165,68 +280,55 @@ export default function DetailPage() {
         <View className='detailStream'>
           <View className='terminalStrip'>
             <View className='terminalCell'>
-              <Text className='terminalLabel'>SOURCE</Text>
+              <Text className='terminalLabel'>来源</Text>
               <Text className='terminalValue'>{article.source || '未知来源'}</Text>
             </View>
             <View className='terminalCell'>
-              <Text className='terminalLabel'>PUBLISH DATE</Text>
+              <Text className='terminalLabel'>发布日期</Text>
               <Text className='terminalValue'>{formatDate(article.publish_date)}</Text>
             </View>
             <View className='terminalCell'>
-              <Text className='terminalLabel'>RISK LANE</Text>
-              <Text className='terminalValue'>{getRiskLabel(score)}</Text>
+              <Text className='terminalLabel'>风险状态</Text>
+              <Text className='terminalValue'>{getRiskLabel(score, evaluated)}</Text>
             </View>
             <View className='terminalCell'>
-              <Text className='terminalLabel'>AI STATE</Text>
-              <Text className='terminalValue'>{hasAnalyzed ? 'PARSED' : 'PENDING'}</Text>
+              <Text className='terminalLabel'>解析状态</Text>
+              <Text className='terminalValue'>{evaluated ? '已解析' : '待解析'}</Text>
             </View>
           </View>
 
           <View className='summaryPanel'>
             <View className='analysisHeader'>
-              <Text className='sectionLabel'>AI 解读</Text>
+              <Text className='sectionLabel'>AI解读</Text>
               <Button className='analyzeButton' loading={analyzing} disabled={analyzing} onClick={handleAnalyze}>
-                {hasAnalyzed ? '重新解析' : 'AI解析'}
+                {evaluated ? '重新解析' : 'AI解析'}
               </Button>
             </View>
             <Text className='sectionLabel'>核心结论</Text>
             <Text className='coreSummary'>{article.interpretation.core_summary}</Text>
           </View>
 
-          <View className='detailSignalGrid'>
-            <View className='signalTile signalTileBlue'>
-              <Text className='signalLabel'>Public Lens</Text>
-              <Text className='signalValue'>{publicLength}</Text>
-              <Text className='signalDesc'>大众视角字符密度</Text>
-            </View>
-            <View className='signalTile signalTileGreen'>
-              <Text className='signalLabel'>Banker Lens</Text>
-              <Text className='signalValue'>{bankerLength}</Text>
-              <Text className='signalDesc'>同业视角字符密度</Text>
-            </View>
-            <View className='signalTile signalTileAmber'>
-              <Text className='signalLabel'>Keyword Depth</Text>
-              <Text className='signalValue'>{keywordCount}</Text>
-              <Text className='signalDesc'>结构化标签数量</Text>
-            </View>
-          </View>
-
           <View className='perspectiveGrid'>
-            <View className='publicPanel'>
-              <Text className='panelTitle'>大众操作指南</Text>
-              <Text className='panelContent'>{article.interpretation.public_perspective}</Text>
+            <View
+              className={`perspectivePanel ${activePerspective === 'public' ? 'publicPanel' : 'bankerPanel'}`}
+              onClick={() => setActivePerspective('public')}
+            >
+              <Text className={activePerspective === 'public' ? 'panelTitle' : 'bankerTitle'}>大众操作指南</Text>
+              {renderPerspectiveContent(article.interpretation.public_perspective, activePerspective === 'public')}
             </View>
 
-            <View className='bankerPanel'>
-              <Text className='bankerTitle'>银行同业视角</Text>
-              <Text className='bankerContent'>{article.interpretation.banker_perspective}</Text>
+            <View
+              className={`perspectivePanel ${activePerspective === 'banker' ? 'publicPanel' : 'bankerPanel'}`}
+              onClick={() => setActivePerspective('banker')}
+            >
+              <Text className={activePerspective === 'banker' ? 'panelTitle' : 'bankerTitle'}>银行同业视角</Text>
+              {renderPerspectiveContent(article.interpretation.banker_perspective, activePerspective === 'banker')}
             </View>
           </View>
 
           <View className='keywordPanel'>
             <View className='boardHeader'>
               <Text className='boardTitle'>结构化关键词</Text>
-              <Text className='boardMeta'>Signal extraction</Text>
             </View>
             <View className='keywords'>
               {article.interpretation.keywords.map((keyword) => (
@@ -234,6 +336,61 @@ export default function DetailPage() {
                   {keyword}
                 </Text>
               ))}
+            </View>
+          </View>
+
+          <View className='chatPanel'>
+            <View className='chatHeader'>
+              <View className='chatTitleBlock'>
+                <Text className='chatTitle'>AI助手</Text>
+              </View>
+              <Text className='chatStatus'>{asking ? '生成中' : '基于当前新闻'}</Text>
+            </View>
+
+            <View className='chatMessages'>
+              {chatMessages.length === 0 ? (
+                <View className='chatEmptyState'>
+                  <Text className='chatEmptyTitle'>围绕这篇新闻继续追问</Text>
+                  <Text className='chatEmptyText'>例如：这条政策对银行理财有什么影响？普通投资者需要注意什么风险？</Text>
+                </View>
+              ) : (
+                chatMessages.map((message) => (
+                  <View className={`chatMessage chatMessage-${message.role}`} key={message.id}>
+                    <Text className='chatRole'>{message.role === 'user' ? '你' : 'AI'}</Text>
+                    <Text className='chatBubbleText'>{message.content}</Text>
+                  </View>
+                ))
+              )}
+              {asking && (
+                <View className='chatMessage chatMessage-assistant chatMessageLoading'>
+                  <Text className='chatRole'>AI</Text>
+                  <Text className='chatBubbleText'>正在结合当前新闻和AI解读生成回答...</Text>
+                </View>
+              )}
+            </View>
+
+            <View className='chatComposer'>
+              <input
+                type='text'
+                className='chatInputNative'
+                value={chatQuestion}
+                disabled={asking}
+                placeholder='输入你想追问的问题'
+                onChange={(event) => setChatQuestion(event.currentTarget.value)}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter') {
+                    void handleAskQuestion()
+                  }
+                }}
+              />
+              <Button
+                className={`chatSendButton ${chatQuestion.trim() ? 'chatSendButtonReady' : 'chatSendButtonIdle'}`}
+                disabled={asking || !chatQuestion.trim()}
+                loading={asking}
+                onClick={handleAskQuestion}
+              >
+                发送
+              </Button>
             </View>
           </View>
         </View>

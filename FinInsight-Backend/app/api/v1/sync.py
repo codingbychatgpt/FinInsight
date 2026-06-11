@@ -1,89 +1,241 @@
+import asyncio
 import logging
+from dataclasses import dataclass, field
+from datetime import datetime, timedelta
 from typing import Any
+from uuid import uuid4
 
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 
 from app.models.article import AIInterpretation, PolicyArticle
-from app.schemas.article import SyncArticleResponse, SyncResponse
-from app.services.crawler import FullTextFetchFailed, fetch_latest_news, scrape_article_content
+from app.api.v1.articles import serialize_article
+from app.schemas.article import ArticleResponse, SyncResponse
+from app.services.crawler import (
+    LOCAL_TIMEZONE,
+    FullTextFetchFailed,
+    fetch_latest_news,
+    scrape_article_content,
+)
 
 router = APIRouter(tags=["sync"])
 logger = logging.getLogger(__name__)
-MAX_ARTICLES_PER_SYNC = 15
-MIN_STORED_CONTENT_LENGTH = 300
+sync_lock = asyncio.Lock()
+MAX_NEW_ARTICLES_PER_SYNC = 15
+MIN_NEW_ARTICLES_PER_SYNC = 10
+EXTRA_CANDIDATES_FOR_FAILURES = 10
+MAX_SCRAPE_CONCURRENCY = 8
+ARTICLE_SCRAPE_TIMEOUT_SECONDS = 22
+MAX_LOOKBACK_DAYS = 2
+
+
+@dataclass
+class SyncAttemptResult:
+    candidate_count: int
+    attempted_count: int
+    processed_articles: list[ArticleResponse] = field(default_factory=list)
+    failed_articles: list[dict[str, str]] = field(default_factory=list)
+    skipped_count: int = 0
+
+
+@dataclass
+class ScrapeResult:
+    item: dict[str, Any]
+    raw_content: str | None = None
+    error: Exception | None = None
 
 
 @router.post("/sync", response_model=SyncResponse)
 async def sync_latest_news() -> SyncResponse:
-    news_items = await fetch_latest_news()
-    selected_items = news_items[:MAX_ARTICLES_PER_SYNC]
-    processed_articles: list[SyncArticleResponse] = []
-    failed_articles: list[dict[str, str]] = []
-    skipped_count = 0
+    if sync_lock.locked():
+        raise HTTPException(status_code=409, detail="A sync task is already running")
 
-    for item in selected_items:
+    async with sync_lock:
+        current_session_id = uuid4().hex
+        attempt = await _run_sync_attempt(
+            current_session_id,
+            _primary_since_boundary(),
+            max_new_articles=MAX_NEW_ARTICLES_PER_SYNC,
+        )
+
+        if len(attempt.processed_articles) < MIN_NEW_ARTICLES_PER_SYNC:
+            remaining_count = MAX_NEW_ARTICLES_PER_SYNC - len(attempt.processed_articles)
+            logger.info(
+                "Only %s new articles in primary sync window; retrying with wider lookback",
+                len(attempt.processed_articles),
+            )
+            fallback_attempt = await _run_sync_attempt(
+                current_session_id,
+                _fallback_since_boundary(),
+                max_new_articles=remaining_count,
+            )
+            attempt = _merge_sync_attempts(attempt, fallback_attempt)
+
+        success_new_count = len(attempt.processed_articles)
+
+        return SyncResponse(
+            synced_count=success_new_count,
+            purged_count=0,
+            status="updated" if success_new_count > 0 else "kept",
+            candidate_count=attempt.candidate_count,
+            attempted_count=attempt.attempted_count,
+            processed_count=success_new_count,
+            skipped_count=attempt.skipped_count,
+            failed_count=len(attempt.failed_articles),
+            articles=attempt.processed_articles,
+            failed_articles=attempt.failed_articles,
+        )
+
+
+async def _run_sync_attempt(
+    current_session_id: str,
+    since: datetime,
+    max_new_articles: int,
+) -> SyncAttemptResult:
+    news_items = await fetch_latest_news(since=since)
+    candidate_items: list[dict[str, Any]] = []
+    failed_articles: list[dict[str, str]] = []
+    processed_articles: list[ArticleResponse] = []
+    skipped_count = 0
+    attempted_count = 0
+    candidate_limit = max_new_articles + EXTRA_CANDIDATES_FOR_FAILURES
+
+    for item in news_items:
+        if len(candidate_items) >= candidate_limit:
+            break
+
+        attempted_count += 1
         existing_article = await PolicyArticle.find_one(PolicyArticle.url == item["url"])
         if existing_article is not None:
-            if _needs_content_refresh(existing_article.raw_content):
-                await _refresh_article_content(existing_article, item, failed_articles)
             skipped_count += 1
             continue
 
-        try:
-            raw_content = await scrape_article_content(item["url"])
-        except FullTextFetchFailed as error:
-            _record_failed_article(item, error, failed_articles)
+        candidate_items.append(item)
+
+    scrape_results = await _scrape_candidates(candidate_items)
+    for result in scrape_results:
+        if result.error is not None:
+            failed_articles.append(_build_failed_article(result.item, result.error))
+            continue
+        if result.raw_content is None:
+            continue
+        if len(processed_articles) >= max_new_articles:
             continue
 
-        article = await _insert_parsed_article(item, raw_content)
-        analysis = _build_pending_analysis(item, raw_content)
-        interpretation = AIInterpretation(
-            article_id=article,
-            core_summary=analysis["core_summary"],
-            banker_perspective=analysis["banker_perspective"],
-            public_perspective=analysis["public_perspective"],
-            impact_score=analysis["impact_score"],
-            keywords=analysis["keywords"],
+        article_response = await _insert_scraped_article(
+            result.item,
+            result.raw_content,
+            current_session_id,
         )
-        await interpretation.insert()
+        if article_response is not None:
+            processed_articles.append(article_response)
 
-        processed_articles.append(
-            SyncArticleResponse(
-                article_id=str(article.id),
-                title=article.title,
-                url=article.url,
-                source=article.source,
-                impact_score=interpretation.impact_score,
-                keywords=interpretation.keywords,
-            ),
-        )
-
-    return SyncResponse(
+    return SyncAttemptResult(
         candidate_count=len(news_items),
-        attempted_count=len(selected_items),
-        processed_count=len(processed_articles),
+        attempted_count=attempted_count,
+        processed_articles=processed_articles,
         skipped_count=skipped_count,
-        failed_count=len(failed_articles),
-        articles=processed_articles,
         failed_articles=failed_articles,
     )
 
 
-def _needs_content_refresh(raw_content: str) -> bool:
-    paragraphs = [paragraph for paragraph in raw_content.splitlines() if paragraph.strip()]
-    return len(raw_content) < MIN_STORED_CONTENT_LENGTH or len(paragraphs) < 2
+async def _scrape_candidates(items: list[dict[str, Any]]) -> list[ScrapeResult]:
+    semaphore = asyncio.Semaphore(MAX_SCRAPE_CONCURRENCY)
+
+    async def scrape_item(item: dict[str, Any]) -> ScrapeResult:
+        async with semaphore:
+            try:
+                raw_content = await asyncio.wait_for(
+                    scrape_article_content(item["url"]),
+                    timeout=ARTICLE_SCRAPE_TIMEOUT_SECONDS,
+                )
+                return ScrapeResult(item=item, raw_content=raw_content)
+            except (FullTextFetchFailed, TimeoutError) as error:
+                return ScrapeResult(item=item, error=error)
+
+    return await asyncio.gather(*(scrape_item(item) for item in items))
 
 
-async def _refresh_article_content(
-    article: PolicyArticle,
+async def _insert_scraped_article(
     item: dict[str, Any],
-    failed_articles: list[dict[str, str]],
-) -> None:
+    raw_content: str,
+    session_id: str,
+) -> ArticleResponse | None:
+    if await PolicyArticle.find_one(PolicyArticle.url == item["url"]) is not None:
+        return None
+
+    article = PolicyArticle(
+        title=item["title"],
+        source=item["source"],
+        publish_date=item["publish_date"],
+        raw_content=raw_content,
+        url=item["url"],
+        status="pending",
+        session_id=session_id,
+    )
+
     try:
-        article.raw_content = await scrape_article_content(item["url"])
-        await article.save()
-    except FullTextFetchFailed as error:
-        _record_failed_article(item, error, failed_articles)
+        await article.insert()
+    except Exception:
+        logger.exception("Failed to insert synced article: %s", item["url"])
+        return None
+
+    analysis = _build_pending_analysis(item, raw_content)
+    interpretation = AIInterpretation(
+        article_id=article,
+        core_summary=analysis["core_summary"],
+        banker_perspective=analysis["banker_perspective"],
+        public_perspective=analysis["public_perspective"],
+        impact_score=analysis["impact_score"],
+        keywords=analysis["keywords"],
+    )
+    await interpretation.insert()
+
+    return await serialize_article(article, interpretation)
+
+
+def _build_failed_article(
+    item: dict[str, Any],
+    error: Exception,
+) -> dict[str, str]:
+    logger.warning("Skipped article because content scraping failed: %s", error)
+    return {
+        "title": item["title"],
+        "url": item["url"],
+        "reason": str(error) or error.__class__.__name__,
+    }
+
+
+def _merge_sync_attempts(
+    primary: SyncAttemptResult,
+    fallback: SyncAttemptResult,
+) -> SyncAttemptResult:
+    return SyncAttemptResult(
+        candidate_count=primary.candidate_count + fallback.candidate_count,
+        attempted_count=primary.attempted_count + fallback.attempted_count,
+        processed_articles=[*primary.processed_articles, *fallback.processed_articles],
+        failed_articles=[*primary.failed_articles, *fallback.failed_articles],
+        skipped_count=primary.skipped_count + fallback.skipped_count,
+    )
+
+
+def _primary_since_boundary() -> datetime:
+    now = datetime.now(LOCAL_TIMEZONE)
+    return (now - timedelta(days=1)).replace(
+        hour=0,
+        minute=0,
+        second=0,
+        microsecond=0,
+    )
+
+
+def _fallback_since_boundary() -> datetime:
+    now = datetime.now(LOCAL_TIMEZONE)
+    return (now - timedelta(days=MAX_LOOKBACK_DAYS)).replace(
+        hour=0,
+        minute=0,
+        second=0,
+        microsecond=0,
+    )
 
 
 def _build_pending_analysis(item: dict[str, Any], raw_content: str) -> dict[str, Any]:
@@ -126,34 +278,3 @@ def _extract_keywords(text: str) -> list[str]:
     ]
     keywords = [keyword for keyword in candidates if keyword in text]
     return keywords[:5] or ["金融政策"]
-
-
-def _record_failed_article(
-    item: dict[str, Any],
-    error: FullTextFetchFailed,
-    failed_articles: list[dict[str, str]],
-) -> None:
-    logger.warning("Skipped article because content scraping failed: %s", error)
-    failed_articles.append(
-        {
-            "title": item["title"],
-            "url": item["url"],
-            "reason": str(error),
-        },
-    )
-
-
-async def _insert_parsed_article(
-    item: dict[str, Any],
-    raw_content: str,
-) -> PolicyArticle:
-    article = PolicyArticle(
-        title=item["title"],
-        source=item["source"],
-        publish_date=item["publish_date"],
-        raw_content=raw_content,
-        url=item["url"],
-        status="pending",
-    )
-    await article.insert()
-    return article

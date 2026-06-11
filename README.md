@@ -2,6 +2,14 @@
 
 FinInsight 是一个前后端分离的金融政策资讯与 AI 解读项目。后端使用 FastAPI + MongoDB，前端使用 Taro + React 构建 H5 页面。
 
+生产域名已确定为：
+
+```text
+https://52zzx.top
+```
+
+生产环境使用同域 API：浏览器请求 `/api/...`，由 Nginx 反向代理到后端。生产页面不依赖用户设备上的 localhost。
+
 ## 项目结构
 
 ```text
@@ -18,6 +26,7 @@ Finance_platform/
 │   ├── src/
 │   ├── config/
 │   └── package.json
+├── deploy/                  # 生产部署、Nginx、Docker Compose 和备份模板
 └── README.md
 ```
 
@@ -144,11 +153,14 @@ npm run dev:h5
 http://127.0.0.1:10086
 ```
 
-前端默认请求后端地址为 `http://127.0.0.1:8000`。如果后端地址不同，可以在启动前设置：
+前端业务代码始终请求同域 `/api`。本地 `npm run dev:h5` 会单独生成 `dist/runtime-config.js`，把 API 指向本地后端；生产构建的运行时配置为空，因此使用 `https://52zzx.top/api/...`。
 
-```powershell
-$env:TARO_APP_API_BASE_URL="http://127.0.0.1:8000"
-npm run dev:h5
+如未来使用独立 API 域名，可修改部署时的 `runtime-config.js`：
+
+```html
+<script>
+  window.__FININSIGHT_API_BASE_URL__ = 'https://api.52zzx.top'
+</script>
 ```
 
 ## 推荐启动顺序
@@ -164,8 +176,10 @@ npm run dev:h5
 | --- | --- | --- |
 | GET | `/api/v1/health` | 健康检查 |
 | GET | `/api/v1/articles` | 获取文章列表 |
+| GET | `/api/v1/articles/{article_id}` | 获取单篇文章，支持详情页刷新和直达 |
 | POST | `/api/v1/sync` | 同步最新资讯 |
 | POST | `/api/v1/articles/{article_id}/analyze` | 对指定文章执行 AI 解析 |
+| POST | `/api/v1/articles/{article_id}/chat` | 围绕指定文章进行 AI 问答 |
 
 ## 构建与检查
 
@@ -183,7 +197,18 @@ cd FinInsight-Frontend
 npm run build:h5
 ```
 
-后端当前没有单独的测试脚本。可以通过健康检查和 API 文档确认服务状态。
+生产 H5 构建：
+
+```powershell
+cd FinInsight-Frontend
+npm run build:h5:prod
+```
+
+完整生产部署说明见：
+
+```text
+deploy/README.md
+```
 
 ## 常见问题
 
@@ -197,7 +222,7 @@ MONGO_URI=mongodb://localhost:27017
 
 ### 前端页面请求失败
 
-确认后端已启动在 `http://127.0.0.1:8000`，并检查前端启动时的 `TARO_APP_API_BASE_URL` 是否正确。
+本地开发时确认后端已启动在 `http://127.0.0.1:8000`。生产环境确认 Nginx 已把 `/api/` 反向代理到后端。
 
 ### AI 解析失败
 
@@ -206,3 +231,13 @@ MONGO_URI=mongodb://localhost:27017
 ### 端口被占用
 
 后端默认使用 `8000`，前端默认使用 `10086`。如果端口被占用，可以修改启动命令中的端口，同时保持前端 API 地址和后端 CORS 配置一致。
+
+## 生产部署
+
+购买云服务器并拿到公网 IP 后：
+
+1. 把 `52zzx.top` 和 `www.52zzx.top` 的 A 记录指向服务器公网 IP。
+2. 把项目上传到 `/opt/fininsight`。
+3. 按照 `deploy/README.md` 执行服务器准备和生产部署脚本。
+4. 使用 Certbot 签发 HTTPS 证书。
+5. 验证自动备份和健康检查。

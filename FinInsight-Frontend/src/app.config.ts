@@ -6,7 +6,7 @@ export default defineAppConfig({
   window: {
     backgroundTextStyle: 'light',
     navigationBarBackgroundColor: '#F7F8FA',
-    navigationBarTitleText: 'FinInsight',
+    navigationBarTitleText: '智汇金融',
     navigationBarTextStyle: 'black'
   }
 })

@@ -9,6 +9,7 @@ import { setCurrentArticle } from '../../store/article'
 import './index.scss'
 
 const PAGE_SIZE = 15
+const LAST_SYNC_DATE_KEY = 'fininsight:last-sync-date'
 
 function formatDate(value: string): string {
   if (!value) {
@@ -25,7 +26,10 @@ function formatDate(value: string): string {
   ).padStart(2, '0')}`
 }
 
-function getScoreLevel(score: number): string {
+function getScoreLevel(score: number, evaluated = true): string {
+  if (!evaluated) {
+    return 'unevaluated'
+  }
   if (score >= 8) {
     return 'high'
   }
@@ -45,7 +49,10 @@ function getSourceClass(source: string): string {
   return 'sourceDefault'
 }
 
-function getRiskLabel(score: number): string {
+function getRiskLabel(score: number, evaluated = true): string {
+  if (!evaluated) {
+    return '未评估'
+  }
   if (score >= 8) {
     return '高冲击'
   }
@@ -60,6 +67,14 @@ export default function IndexPage() {
   const [loading, setLoading] = useState<boolean>(false)
   const [syncing, setSyncing] = useState<boolean>(false)
   const [syncPulse, setSyncPulse] = useState<boolean>(false)
+  const [leaving, setLeaving] = useState<boolean>(false)
+  const [lastSyncDate, setLastSyncDate] = useState<string>(() => {
+    try {
+      return Taro.getStorageSync(LAST_SYNC_DATE_KEY) || ''
+    } catch {
+      return ''
+    }
+  })
 
   const loadArticles = useCallback(async () => {
     setLoading(true)
@@ -82,12 +97,13 @@ export default function IndexPage() {
   }, [loadArticles])
 
   const dashboard = useMemo(() => {
-    const scores = articles.map((article) => Math.max(0, Math.min(10, article.interpretation.impact_score || 0)))
+    const evaluatedArticles = articles.filter((article) => article.status === 'parsed')
+    const scores = evaluatedArticles.map((article) => Math.max(0, Math.min(10, article.interpretation.impact_score || 0)))
     const totalScore = scores.reduce((sum, score) => sum + score, 0)
-    const avgScore = articles.length > 0 ? totalScore / articles.length : 0
     const highCount = scores.filter((score) => score >= 8).length
     const mediumCount = scores.filter((score) => score >= 5 && score < 8).length
-    const parsedCount = articles.filter((article) => article.status === 'parsed' || (article.interpretation.impact_score || 0) > 0).length
+    const lowCount = Math.max(0, evaluatedArticles.length - highCount - mediumCount)
+    const parsedCount = evaluatedArticles.length
     const pendingCount = Math.max(0, articles.length - parsedCount)
     const sourceCounts = new Map<string, number>()
     const keywordCounts = new Map<string, number>()
@@ -101,17 +117,30 @@ export default function IndexPage() {
     })
 
     return {
-      avgScore,
+      avgScore: evaluatedArticles.length > 0 ? totalScore / evaluatedArticles.length : 0,
       highCount,
       mediumCount,
+      lowCount,
       pendingCount,
       parsedCount,
-      highRatio: articles.length > 0 ? Math.round((highCount / articles.length) * 100) : 0,
-      latestDate: articles[0] ? formatDate(articles[0].publish_date) : '等待同步',
-      sourceLeaders: Array.from(sourceCounts.entries()).sort((left, right) => right[1] - left[1]).slice(0, 3),
-      topKeywords: Array.from(keywordCounts.entries()).sort((left, right) => right[1] - left[1]).slice(0, 8)
+      parsedRatio: articles.length > 0 ? Math.round((parsedCount / articles.length) * 100) : 0,
+      sourceCount: sourceCounts.size,
+      latestDate: lastSyncDate || '等待同步',
+      sourceLeaders: Array.from(sourceCounts.entries()).sort((left, right) => right[1] - left[1]).slice(0, 4),
+      topKeywords: Array.from(keywordCounts.entries()).sort((left, right) => right[1] - left[1]).slice(0, 10),
+      riskBuckets: [
+        { className: 'riskHigh', count: highCount, label: '高冲击' },
+        { className: 'riskMedium', count: mediumCount, label: '观察区' },
+        { className: 'riskLow', count: lowCount, label: '低波动' },
+        { className: 'riskUnevaluated', count: pendingCount, label: '未评估' }
+      ],
+      qualityRows: [
+        { label: '解析覆盖', value: `${articles.length > 0 ? Math.round((parsedCount / articles.length) * 100) : 0}%` },
+        { label: '来源数量', value: `${sourceCounts.size}` },
+        { label: '待解析', value: `${Math.max(0, articles.length - parsedCount)}` }
+      ]
     }
-  }, [articles])
+  }, [articles, lastSyncDate])
 
   const handleSync = async () => {
     setSyncing(true)
@@ -121,10 +150,12 @@ export default function IndexPage() {
 
     try {
       const result = await syncArticles()
-      const list = await getArticles(PAGE_SIZE, 0)
-      setArticles(list)
+      const syncedDate = formatDate(new Date().toISOString())
+      setArticles(result.articles)
+      setLastSyncDate(syncedDate)
+      Taro.setStorageSync(LAST_SYNC_DATE_KEY, syncedDate)
       Taro.showToast({
-        title: `已抓取并解析 ${result.processed_count} 条新政策`,
+        title: `已抓取 ${result.processed_count} 条今日热点`,
         icon: 'success'
       })
       setSyncPulse(true)
@@ -143,13 +174,18 @@ export default function IndexPage() {
 
   const openDetail = (article: ArticleItem) => {
     setCurrentArticle(article)
-    Taro.navigateTo({
-      url: `/pages/detail/index?id=${encodeURIComponent(article.id)}`
-    })
+    setLeaving(true)
+    setTimeout(() => {
+      void Taro.reLaunch({
+        url: `/pages/detail/index?id=${encodeURIComponent(article.id)}`
+      }).catch(() => {
+        setLeaving(false)
+      })
+    }, 180)
   }
 
   return (
-    <View className='page'>
+    <View className={`page ${leaving ? 'pageLeaving' : ''}`}>
       <View className='ambient ambientOne' />
       <View className='ambient ambientTwo' />
       <View className='ambient ambientThree' />
@@ -158,15 +194,25 @@ export default function IndexPage() {
         <View className='console'>
           <View className='header'>
             <View className='headerMeta'>
-              <Text className='eyebrow'>FINANCIAL SIGNALS</Text>
               <Text className='title'>FinInsight 智汇金融</Text>
             </View>
-            <Text className='subtitle'>政策资讯与 AI 结构化解读</Text>
+            <Text className='subtitle'>政策资讯与智能结构化解读</Text>
+            <View className='headerStats'>
+              <View className='headerStat'>
+                <Text className='headerStatLabel'>风险均值</Text>
+                <Text className='headerStatValue'>{dashboard.parsedCount > 0 ? dashboard.avgScore.toFixed(1) : '未评估'}</Text>
+              </View>
+              <View className='headerStat'>
+                <Text className='headerStatLabel'>解析覆盖</Text>
+                <Text className='headerStatValue'>{dashboard.parsedRatio}%</Text>
+              </View>
+              <View className='headerStat'>
+                <Text className='headerStatLabel'>来源数量</Text>
+                <Text className='headerStatValue'>{dashboard.sourceCount}</Text>
+              </View>
+            </View>
             <View className='tickerTape'>
-              <Text className='tickerItem'>POLICY DESK / LIVE</Text>
-              <Text className='tickerItem'>AVG {dashboard.avgScore.toFixed(1)}</Text>
-              <Text className='tickerItem'>HIGH IMPACT {dashboard.highRatio}%</Text>
-              <Text className='tickerItem'>LATEST {dashboard.latestDate}</Text>
+              <Text className='tickerItem'>最新 {dashboard.latestDate}</Text>
             </View>
           </View>
 
@@ -181,7 +227,7 @@ export default function IndexPage() {
                 <View className='syncOrb'>
                   {syncing && <View className='syncSpinner' />}
                 </View>
-                <Text className='syncButtonText'>{syncing ? '同步中' : '同步最新政策'}</Text>
+                <Text className='syncButtonText'>{syncing ? '同步中' : '同步今日热点'}</Text>
               </View>
             </Button>
             <View className='syncTelemetry'>
@@ -193,25 +239,9 @@ export default function IndexPage() {
         </View>
 
         <View className='dashboardGrid'>
-          <View className='metricCard metricCardPrimary'>
-            <Text className='metricLabel'>Impact Average</Text>
-            <Text className='metricValue'>{dashboard.avgScore.toFixed(1)}</Text>
-            <Text className='metricDesc'>样本池综合影响分</Text>
-          </View>
-          <View className='metricCard'>
-            <Text className='metricLabel'>High Impact</Text>
-            <Text className='metricValue'>{dashboard.highCount}</Text>
-            <Text className='metricDesc'>8 分及以上政策</Text>
-          </View>
-          <View className='metricCard'>
-            <Text className='metricLabel'>Monitor Lane</Text>
-            <Text className='metricValue'>{dashboard.mediumCount}</Text>
-            <Text className='metricDesc'>5-7 分观察区间</Text>
-          </View>
           <View className='sourceBoard'>
             <View className='boardHeader'>
               <Text className='boardTitle'>来源权重</Text>
-              <Text className='boardMeta'>Top Sources</Text>
             </View>
             {dashboard.sourceLeaders.length > 0 ? (
               dashboard.sourceLeaders.map(([source, count]) => (
@@ -230,10 +260,29 @@ export default function IndexPage() {
               <Text className='boardEmpty'>等待同步数据</Text>
             )}
           </View>
+          <View className='riskBoard'>
+            <View className='boardHeader'>
+              <Text className='boardTitle'>风险分层</Text>
+            </View>
+            <View className='riskStack'>
+              {dashboard.riskBuckets.map((bucket) => (
+                <View className='riskRow' key={bucket.label}>
+                  <View className={`riskDot ${bucket.className}`} />
+                  <Text className='riskName'>{bucket.label}</Text>
+                  <View className='riskTrack'>
+                    <View
+                      className={`riskFill ${bucket.className}`}
+                      style={{ width: `${articles.length > 0 ? Math.max(8, Math.round((bucket.count / articles.length) * 100)) : 0}%` }}
+                    />
+                  </View>
+                  <Text className='riskCount'>{bucket.count}</Text>
+                </View>
+              ))}
+            </View>
+          </View>
           <View className='keywordBoard'>
             <View className='boardHeader'>
               <Text className='boardTitle'>关键词热区</Text>
-              <Text className='boardMeta'>Signal Tags</Text>
             </View>
             <View className='keywordCloud'>
               {dashboard.topKeywords.length > 0 ? (
@@ -247,11 +296,24 @@ export default function IndexPage() {
               )}
             </View>
           </View>
+          <View className='qualityBoard'>
+            <View className='boardHeader'>
+              <Text className='boardTitle'>数据质量</Text>
+            </View>
+            <View className='qualityRows'>
+              {dashboard.qualityRows.map((row) => (
+                <View className='qualityRow' key={row.label}>
+                  <Text className='qualityLabel'>{row.label}</Text>
+                  <Text className='qualityValue'>{row.value}</Text>
+                </View>
+              ))}
+            </View>
+          </View>
         </View>
 
         <View className='sectionHeader'>
           <Text className='sectionTitle'>政策流</Text>
-          <Text className='sectionMeta'>Bloomberg-style signal queue</Text>
+          <Text className='sectionMeta'>政策信号队列</Text>
         </View>
 
         <View className='list'>
@@ -271,15 +333,16 @@ export default function IndexPage() {
           ) : articles.length === 0 ? (
             <View className='empty'>
               <Text className='emptyTitle'>暂无历史政策资讯</Text>
-              <Text className='emptyDesc'>点击“同步最新政策”抓取并保存最新数据</Text>
+              <Text className='emptyDesc'>点击“同步今日热点”抓取并保存最新数据</Text>
             </View>
           ) : (
             articles.map((article, index) => {
               const score = Math.max(0, Math.min(10, article.interpretation.impact_score || 0))
-              const scoreLevel = getScoreLevel(score)
+              const evaluated = article.status === 'parsed'
+              const scoreLevel = getScoreLevel(score, evaluated)
               const staggerStyle = {
                 '--stagger-index': Math.min(index, 4),
-                '--score-width': `${score * 10}%`
+                '--score-width': `${evaluated ? score * 10 : 0}%`
               } as CSSProperties
               const articleKeywords = article.interpretation.keywords.slice(0, 3)
 
@@ -295,17 +358,13 @@ export default function IndexPage() {
                     <Text className='cardTitle'>{article.title}</Text>
                     <View className={`scorePill scorePill-${scoreLevel}`}>
                       <View className='scoreAura' />
-                      <Text className='scoreValue'>{score}</Text>
+                      <Text className='scoreValue'>{evaluated ? score : 0}</Text>
                     </View>
                   </View>
                   <View className='cardTelemetry'>
-                    <Text className={`riskBadge riskBadge-${scoreLevel}`}>{getRiskLabel(score)}</Text>
-                    <Text className='statusBadge'>{article.status || 'pending'}</Text>
-                    <Text className='articleCode'>#{String(article.id || article.article_id || 'NA').slice(0, 8)}</Text>
+                    <Text className={`riskBadge riskBadge-${scoreLevel}`}>{getRiskLabel(score, evaluated)}</Text>
+                    <Text className='statusBadge'>{evaluated ? '已解析' : '待解析'}</Text>
                   </View>
-                  <Text className='summary'>
-                    {article.interpretation.core_summary || '已获取资讯，等待 AI 解析。'}
-                  </Text>
                   <View className='scoreTrack'>
                     <View className={`scoreTrackFill scoreTrackFill-${scoreLevel}`} />
                   </View>

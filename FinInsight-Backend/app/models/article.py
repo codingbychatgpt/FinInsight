@@ -12,11 +12,13 @@ class PolicyArticle(Document):
     raw_content: str
     url: Indexed(str, unique=True)
     status: Literal["pending", "parsed", "failed"] = "pending"
+    session_id: str | None = None
 
     class Settings:
         name = "policy_articles"
         indexes = [
             IndexModel([("publish_date", DESCENDING)]),
+            IndexModel([("session_id", DESCENDING)]),
         ]
 
 

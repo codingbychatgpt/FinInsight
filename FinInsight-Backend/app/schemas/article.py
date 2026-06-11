@@ -28,6 +28,14 @@ class ArticleListResponse(BaseModel):
     articles: list[ArticleResponse]
 
 
+class ArticleChatRequest(BaseModel):
+    question: str = Field(min_length=1, max_length=500)
+
+
+class ArticleChatResponse(BaseModel):
+    answer: str
+
+
 class SyncArticleResponse(BaseModel):
     article_id: str
     title: str
@@ -44,10 +52,13 @@ class FailedArticleResponse(BaseModel):
 
 
 class SyncResponse(BaseModel):
+    synced_count: int
+    purged_count: int
+    status: Literal["updated", "kept"]
     candidate_count: int
     attempted_count: int
     processed_count: int
     skipped_count: int
     failed_count: int
-    articles: list[SyncArticleResponse]
+    articles: list[ArticleResponse]
     failed_articles: list[FailedArticleResponse]

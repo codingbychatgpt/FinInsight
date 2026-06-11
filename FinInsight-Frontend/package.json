@@ -3,8 +3,9 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev:h5": "npm run build:h5 && python -m http.server 10086 --bind 127.0.0.1 --directory dist",
-    "build:h5": "taro build --type h5 && node scripts/generate-h5-html.mjs",
+    "dev:h5": "npm run build:h5 && node scripts/generate-runtime-config.mjs http://127.0.0.1:8000 && python -m http.server 10086 --bind 127.0.0.1 --directory dist",
+    "build:h5": "taro build --type h5 && node scripts/generate-h5-html.mjs && node scripts/generate-runtime-config.mjs",
+    "build:h5:prod": "taro build --type h5 && node scripts/generate-h5-html.mjs && node scripts/generate-runtime-config.mjs",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

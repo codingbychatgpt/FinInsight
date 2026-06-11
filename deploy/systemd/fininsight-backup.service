@@ -1,0 +1,9 @@
+[Unit]
+Description=FinInsight MongoDB Backup
+After=docker.service
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/fininsight/deploy
+EnvironmentFile=/opt/fininsight/deploy/.env.production
+ExecStart=/usr/bin/bash /opt/fininsight/deploy/scripts/backup-mongodb.sh

@@ -3,12 +3,15 @@ import json
 import logging
 from typing import Any
 
+import httpx
 from openai import AsyncOpenAI
 
 from app.core.config import get_settings
 
 logger = logging.getLogger(__name__)
 LLM_TIMEOUT_SECONDS = 30.0
+MAX_ANALYSIS_INPUT_CHARS = 12000
+LLM_MAX_ATTEMPTS = 2
 
 
 def _default_error_result() -> dict[str, Any]:
@@ -29,11 +32,31 @@ def _get_openai_client() -> AsyncOpenAI:
     return AsyncOpenAI(
         api_key=settings.openai_api_key,
         base_url=settings.openai_base_url,
+        http_client=httpx.AsyncClient(
+            timeout=LLM_TIMEOUT_SECONDS,
+            trust_env=False,
+        ),
         timeout=LLM_TIMEOUT_SECONDS,
     )
 
 
+async def _create_completion(client: AsyncOpenAI, **kwargs: Any) -> Any:
+    for attempt in range(LLM_MAX_ATTEMPTS):
+        try:
+            return await asyncio.wait_for(
+                client.chat.completions.create(**kwargs),
+                timeout=LLM_TIMEOUT_SECONDS,
+            )
+        except Exception:
+            if attempt + 1 >= LLM_MAX_ATTEMPTS:
+                raise
+            await asyncio.sleep(1.0)
+
+    raise RuntimeError("LLM request failed")
+
+
 async def analyze_policy_text(text: str) -> dict[str, Any]:
+    text = text[:MAX_ANALYSIS_INPUT_CHARS]
     prompt = (
         "你是一位资深的银行理财经理与宏观经济研究员。请阅读以下金融政策文本：\n"
         f"{text}\n"
@@ -49,9 +72,9 @@ async def analyze_policy_text(text: str) -> dict[str, Any]:
 
     try:
         settings = get_settings()
-        client = _get_openai_client()
-        response = await asyncio.wait_for(
-            client.chat.completions.create(
+        async with _get_openai_client() as client:
+            response = await _create_completion(
+                client,
                 model=settings.openai_model,
                 messages=[
                     {
@@ -65,9 +88,7 @@ async def analyze_policy_text(text: str) -> dict[str, Any]:
                 ],
                 response_format={"type": "json_object"},
                 max_tokens=1800,
-            ),
-            timeout=LLM_TIMEOUT_SECONDS,
-        )
+            )
 
         content = response.choices[0].message.content
         if not content:
@@ -78,9 +99,55 @@ async def analyze_policy_text(text: str) -> dict[str, Any]:
             "core_summary": str(result.get("core_summary", "解析失败")),
             "banker_perspective": str(result.get("banker_perspective", "")),
             "public_perspective": str(result.get("public_perspective", "")),
-            "impact_score": int(result.get("impact_score", 1)),
-            "keywords": list(result.get("keywords", ["解析失败"])),
+            "impact_score": max(1, min(10, int(result.get("impact_score", 1)))),
+            "keywords": [str(keyword) for keyword in list(result.get("keywords", ["解析失败"]))[:5]],
         }
     except Exception:
         logger.exception("Failed to analyze policy text with LLM")
         return _default_error_result()
+
+
+async def answer_article_question(article_context: dict[str, Any], question: str) -> str:
+    raw_content = str(article_context.get("raw_content", ""))[:6000]
+    interpretation = article_context.get("interpretation") or {}
+    keywords = interpretation.get("keywords") or []
+    prompt = (
+        "你是 FinInsight 的金融资讯问答助手。请只基于下列当前新闻与已有 AI 解读回答用户问题；"
+        "如果材料不足以判断，要明确说明不确定，不能编造事实、价格、监管口径或投资建议。\n\n"
+        f"标题：{article_context.get('title', '')}\n"
+        f"来源：{article_context.get('source', '')}\n"
+        f"发布日期：{article_context.get('publish_date', '')}\n"
+        f"风险分：{interpretation.get('impact_score', 0)}/10\n"
+        f"关键词：{'、'.join(str(keyword) for keyword in keywords)}\n"
+        f"核心结论：{interpretation.get('core_summary', '')}\n"
+        f"大众操作指南：{interpretation.get('public_perspective', '')}\n"
+        f"银行同业视角：{interpretation.get('banker_perspective', '')}\n"
+        f"新闻正文：{raw_content}\n\n"
+        f"用户问题：{question}\n\n"
+        "请用中文回答，控制在120-350字。优先给出结论，再补充关键依据和风险提示。"
+    )
+
+    try:
+        settings = get_settings()
+        async with _get_openai_client() as client:
+            response = await _create_completion(
+                client,
+                model=settings.openai_model,
+                messages=[
+                    {
+                        "role": "system",
+                        "content": "你是严谨的金融新闻问答助手，只基于提供的单篇新闻上下文回答，不输出 Markdown 表格。",
+                    },
+                    {
+                        "role": "user",
+                        "content": prompt,
+                    },
+                ],
+                max_tokens=800,
+            )
+
+        content = response.choices[0].message.content
+        return content.strip() if content else "暂时无法生成回答，请稍后重试。"
+    except Exception:
+        logger.exception("Failed to answer article question with LLM")
+        return "AI 问答暂不可用，请稍后重试或检查 API 配置。"

@@ -25,21 +25,12 @@ export interface ArticleListResponse {
   articles: ArticleItem[]
 }
 
-export interface SyncArticleItem {
-  article_id: string
-  title: string
-  url: string
-  source: string
-  impact_score: number
-  keywords: string[]
-}
-
 export interface SyncResult {
   candidate_count?: number
   attempted_count?: number
   processed_count: number
   skipped_count?: number
-  articles: SyncArticleItem[]
+  articles: ArticleItem[]
   failed_count?: number
   failed_articles?: Array<{
     title: string
@@ -48,10 +39,21 @@ export interface SyncResult {
   }>
 }
 
-const DEFAULT_BASE_URL = 'http://127.0.0.1:8000'
+export interface ArticleChatResponse {
+  answer: string
+}
 
 function getBaseUrl(): string {
-  return process.env.TARO_APP_API_BASE_URL || DEFAULT_BASE_URL
+  if (typeof window !== 'undefined') {
+    const runtimeApiBaseUrl = (window as any).__FININSIGHT_API_BASE_URL__
+    if (typeof runtimeApiBaseUrl === 'string' && runtimeApiBaseUrl.trim()) {
+      return runtimeApiBaseUrl.trim()
+    }
+
+    return ''
+  }
+
+  return ''
 }
 
 async function request<T>(options: Taro.request.Option): Promise<T> {
@@ -67,7 +69,9 @@ async function request<T>(options: Taro.request.Option): Promise<T> {
     })
 
     if (response.statusCode < 200 || response.statusCode >= 300) {
-      throw new Error(`Request failed with status ${response.statusCode}`)
+      const detail = (response.data as any)?.detail
+      const message = typeof detail === 'string' ? detail : `请求失败，状态码 ${response.statusCode}`
+      throw new Error(message)
     }
 
     return response.data as T
@@ -114,6 +118,15 @@ export async function getArticles(limit = 15, offset = 0): Promise<ArticleItem[]
   return list.map((item) => normalizeArticle(item))
 }
 
+export async function getArticle(articleId: string): Promise<ArticleItem> {
+  const data = await request<ArticleItem>({
+    url: `/api/v1/articles/${encodeURIComponent(articleId)}`,
+    method: 'GET'
+  })
+
+  return normalizeArticle(data)
+}
+
 export async function syncArticles(): Promise<SyncResult> {
   const data = await request<SyncResult>({
     url: '/api/v1/sync',
@@ -126,7 +139,7 @@ export async function syncArticles(): Promise<SyncResult> {
     skipped_count: data.skipped_count,
     failed_count: data.failed_count,
     failed_articles: data.failed_articles,
-    articles: data.articles || []
+    articles: (data.articles || []).map((item) => normalizeArticle(item))
   }
 }
 
@@ -140,4 +153,17 @@ export async function analyzeArticle(articleId: string): Promise<ArticleItem> {
   })
 
   return normalizeArticle(data)
+}
+
+export async function askArticleQuestion(articleId: string, question: string): Promise<string> {
+  const data = await request<ArticleChatResponse>({
+    url: `/api/v1/articles/${encodeURIComponent(articleId)}/chat`,
+    method: 'POST',
+    data: {
+      question
+    },
+    timeout: 45000
+  })
+
+  return String(data.answer || '')
 }

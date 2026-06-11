@@ -1,3 +1,5 @@
+import inspect
+
 from beanie import init_beanie
 from motor.motor_asyncio import AsyncIOMotorClient
 from pymongo import AsyncMongoClient
@@ -36,3 +38,24 @@ async def init_db() -> None:
                 AIInterpretation,
             ],
         )
+
+
+async def ping_db() -> bool:
+    if client is None:
+        return False
+
+    try:
+        await client.admin.command("ping")
+        return True
+    except Exception:
+        return False
+
+
+async def close_db() -> None:
+    global client
+
+    if client is not None:
+        close_result = client.close()
+        if inspect.isawaitable(close_result):
+            await close_result
+        client = None

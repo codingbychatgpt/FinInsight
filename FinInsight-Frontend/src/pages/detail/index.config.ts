@@ -1,3 +1,3 @@
 export default definePageConfig({
-  navigationBarTitleText: 'AI 深度解读'
+  navigationBarTitleText: 'AI深度解读'
 })

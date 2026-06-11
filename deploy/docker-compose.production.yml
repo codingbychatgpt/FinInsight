@@ -1,0 +1,60 @@
+services:
+  mongo:
+    image: mongo:7
+    restart: unless-stopped
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_ROOT_USERNAME}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_ROOT_PASSWORD}
+      MONGO_INITDB_DATABASE: ${MONGO_DB_NAME}
+    volumes:
+      - mongo_data:/data/db
+    networks:
+      - fininsight_internal
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "mongosh --quiet --username $$MONGO_INITDB_ROOT_USERNAME --password $$MONGO_INITDB_ROOT_PASSWORD --authenticationDatabase admin --eval \"db.adminCommand('ping').ok\""
+        ]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+
+  backend:
+    build:
+      context: ../FinInsight-Backend
+    restart: unless-stopped
+    environment:
+      MONGO_URI: mongodb://${MONGO_ROOT_USERNAME}:${MONGO_ROOT_PASSWORD}@mongo:27017/${MONGO_DB_NAME}?authSource=admin
+      MONGO_DB_NAME: ${MONGO_DB_NAME}
+      ENVIRONMENT: production
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      OPENAI_BASE_URL: ${OPENAI_BASE_URL}
+      OPENAI_MODEL: ${OPENAI_MODEL}
+      CORS_ORIGINS: ${CORS_ORIGINS}
+      REQUEST_LOG_ENABLED: "true"
+    ports:
+      - "127.0.0.1:8000:8000"
+    depends_on:
+      mongo:
+        condition: service_healthy
+    networks:
+      - fininsight_internal
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/v1/health', timeout=5)"
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+networks:
+  fininsight_internal:
+    driver: bridge
+
+volumes:
+  mongo_data:

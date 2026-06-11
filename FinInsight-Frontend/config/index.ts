@@ -11,11 +11,6 @@ export default defineConfig(async () => {
       '@tarojs/plugin-framework-react',
       '@tarojs/plugin-platform-h5'
     ],
-    defineConstants: {
-      'process.env.TARO_APP_API_BASE_URL': JSON.stringify(
-        process.env.TARO_APP_API_BASE_URL || 'http://127.0.0.1:8000'
-      )
-    },
     framework: 'react',
     compiler: 'webpack5',
     h5: {
