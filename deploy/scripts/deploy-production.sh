@@ -18,7 +18,7 @@ mkdir -p /opt/fininsight/frontend/dist
 rsync -a --delete "${ROOT_DIR}/FinInsight-Frontend/dist/" /opt/fininsight/frontend/dist/
 
 cd "${DEPLOY_DIR}"
-docker compose --env-file .env.production -f docker-compose.production.yml up -d --build
+docker compose --env-file .env.production -f docker-compose.production.yml up -d --build --pull never
 
 install -m 0644 nginx/52zzx.top.conf /etc/nginx/sites-available/52zzx.top
 ln -sfn /etc/nginx/sites-available/52zzx.top /etc/nginx/sites-enabled/52zzx.top

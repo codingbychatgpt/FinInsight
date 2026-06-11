@@ -34,7 +34,7 @@ FinInsight 是少量受邀用户使用的私有金融信息工具，预计用户
 
 - 增加登录页、登录、退出和当前用户接口。
 - 账号由管理员创建，不开放注册。
-- 密码使用 Argon2 或 bcrypt 哈希保存。
+- 密码使用 PBKDF2-SHA256 哈希保存。
 - 建议使用服务端 Session 或 `HttpOnly + Secure` Cookie。
 - `user` 登录后进入业务主页，`admin` 登录后直接进入管理后台。
 - 登录体系完成后删除同步接口 Basic Auth。
