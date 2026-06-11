@@ -1,5 +1,6 @@
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 
+from app.core.auth import require_user
 from app.models.article import AIInterpretation, PolicyArticle
 from app.schemas.article import (
     AIInterpretationResponse,
@@ -10,7 +11,7 @@ from app.schemas.article import (
 )
 from app.services.llm_parser import analyze_policy_text, answer_article_question
 
-router = APIRouter(tags=["articles"])
+router = APIRouter(tags=["articles"], dependencies=[Depends(require_user)])
 
 
 def is_analysis_failed(analysis: dict) -> bool:
@@ -153,5 +154,6 @@ async def serialize_article(
         raw_content=article.raw_content,
         url=article.url,
         status=article.status,
+        ingestion_method=article.ingestion_method,
         interpretation=interpretation_response,
     )

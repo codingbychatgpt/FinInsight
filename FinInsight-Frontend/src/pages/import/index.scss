@@ -1,0 +1,147 @@
+.importPage {
+  min-height: 100vh;
+  padding: 24px;
+  background: #060814;
+  color: #e8f1fb;
+}
+
+.importLoading {
+  color: #94a3b8;
+}
+
+.importTopbar,
+.previewHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.importTitle {
+  font-size: 24px;
+  font-weight: 800;
+}
+
+.topbarButton,
+.workspaceButton,
+.confirmButton {
+  min-width: 96px;
+  height: 36px;
+  border: 1px solid rgba(56, 189, 248, .35);
+  border-radius: 4px;
+  background: #0b1830;
+  color: #dff6ff;
+  font-size: 12px;
+}
+
+.importWorkspace {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  margin-top: 24px;
+}
+
+.importColumn,
+.previewPanel {
+  border: 1px solid rgba(148, 163, 184, .18);
+  padding: 20px;
+  background: rgba(11, 16, 34, .92);
+}
+
+.panelLabel {
+  display: block;
+  color: #38bdf8;
+  font-size: 10px;
+}
+
+.panelTitle {
+  display: block;
+  margin-top: 5px;
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.inlineComposer {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 8px;
+  margin-top: 18px;
+}
+
+.workspaceInput,
+.previewInput,
+.previewContent {
+  width: 100%;
+  border: 1px solid rgba(148, 163, 184, .2);
+  outline: none;
+  background: #080d1d;
+  color: #edf6ff;
+}
+
+.workspaceInput,
+.previewInput {
+  height: 38px;
+  padding: 0 12px;
+}
+
+.searchResults {
+  display: grid;
+  gap: 8px;
+  max-height: 380px;
+  margin-top: 14px;
+  overflow-y: auto;
+}
+
+.searchResult {
+  padding: 11px;
+  border: 1px solid rgba(148, 163, 184, .14);
+  background: #090f22;
+  cursor: pointer;
+}
+
+.resultTitle,
+.resultSummary {
+  display: block;
+}
+
+.resultTitle {
+  font-weight: 700;
+}
+
+.resultSummary {
+  margin-top: 5px;
+  color: #8fa1b8;
+  font-size: 11px;
+}
+
+.previewPanel {
+  margin-top: 16px;
+}
+
+.confirmButton {
+  border-color: #34d399;
+  background: #047857;
+  color: #fff;
+}
+
+.previewFields {
+  display: grid;
+  grid-template-columns: 2fr 1fr 1fr;
+  gap: 8px;
+  margin-top: 18px;
+}
+
+.previewContent {
+  min-height: 300px;
+  margin-top: 10px;
+  padding: 14px;
+  resize: vertical;
+}
+
+@media (max-width: 760px) {
+  .importPage { padding: 14px; }
+  .importWorkspace,
+  .previewFields { grid-template-columns: 1fr; }
+  .importTopbar { align-items: flex-start; }
+  .importTitle { font-size: 18px; }
+}

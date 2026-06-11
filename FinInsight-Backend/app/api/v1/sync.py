@@ -5,8 +5,9 @@ from datetime import datetime, timedelta
 from typing import Any
 from uuid import uuid4
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 
+from app.core.auth import require_user
 from app.models.article import AIInterpretation, PolicyArticle
 from app.api.v1.articles import serialize_article
 from app.schemas.article import ArticleResponse, SyncResponse
@@ -17,7 +18,7 @@ from app.services.crawler import (
     scrape_article_content,
 )
 
-router = APIRouter(tags=["sync"])
+router = APIRouter(tags=["sync"], dependencies=[Depends(require_user)])
 logger = logging.getLogger(__name__)
 sync_lock = asyncio.Lock()
 MAX_NEW_ARTICLES_PER_SYNC = 15

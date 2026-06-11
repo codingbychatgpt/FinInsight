@@ -6,6 +6,7 @@ from pymongo import AsyncMongoClient
 
 from app.core.config import get_settings
 from app.models.article import AIInterpretation, PolicyArticle
+from app.models.user import User, UserSession
 
 client: AsyncIOMotorClient | AsyncMongoClient | None = None
 
@@ -23,6 +24,8 @@ async def init_db() -> None:
             document_models=[
                 PolicyArticle,
                 AIInterpretation,
+                User,
+                UserSession,
             ],
         )
     except TypeError as error:
@@ -36,6 +39,8 @@ async def init_db() -> None:
             document_models=[
                 PolicyArticle,
                 AIInterpretation,
+                User,
+                UserSession,
             ],
         )
 

@@ -3,7 +3,8 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import Taro from '@tarojs/taro'
 import { Button, Text, View } from '@tarojs/components'
 
-import { ArticleItem, getArticles, syncArticles } from '../../api'
+import { ArticleItem, getArticles, logout, syncArticles } from '../../api'
+import { useAuthGuard } from '../../hooks/useAuthGuard'
 import { setCurrentArticle } from '../../store/article'
 
 import './index.scss'
@@ -63,6 +64,7 @@ function getRiskLabel(score: number, evaluated = true): string {
 }
 
 export default function IndexPage() {
+  const { user, checking } = useAuthGuard('user')
   const [articles, setArticles] = useState<ArticleItem[]>([])
   const [loading, setLoading] = useState<boolean>(false)
   const [syncing, setSyncing] = useState<boolean>(false)
@@ -93,8 +95,10 @@ export default function IndexPage() {
   }, [])
 
   useEffect(() => {
-    loadArticles()
-  }, [loadArticles])
+    if (!checking) {
+      loadArticles()
+    }
+  }, [checking, loadArticles])
 
   const dashboard = useMemo(() => {
     const evaluatedArticles = articles.filter((article) => article.status === 'parsed')
@@ -184,6 +188,15 @@ export default function IndexPage() {
     }, 180)
   }
 
+  const handleLogout = async () => {
+    await logout()
+    void Taro.reLaunch({ url: '/pages/login/index' })
+  }
+
+  if (checking) {
+    return <View className='page'><View className='authChecking'>验证登录状态...</View></View>
+  }
+
   return (
     <View className={`page ${leaving ? 'pageLeaving' : ''}`}>
       <View className='ambient ambientOne' />
@@ -194,7 +207,14 @@ export default function IndexPage() {
         <View className='console'>
           <View className='header'>
             <View className='headerMeta'>
-              <Text className='title'>FinInsight 智汇金融</Text>
+              <View className='headerTopline'>
+                <Text className='title'>FinInsight 智汇金融</Text>
+                <View className='userToolbar'>
+                  <Text className='userIdentity'>{user?.username}</Text>
+                  <Button className='headerToolButton' onClick={() => Taro.navigateTo({ url: '/pages/import/index' })}>信息导入</Button>
+                  <Button className='headerToolButton' onClick={handleLogout}>退出</Button>
+                </View>
+              </View>
             </View>
             <Text className='subtitle'>政策资讯与智能结构化解读</Text>
             <View className='headerStats'>

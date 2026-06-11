@@ -21,6 +21,7 @@ class ArticleResponse(BaseModel):
     raw_content: str
     url: str
     status: Literal["pending", "parsed", "failed"]
+    ingestion_method: Literal["sync", "url_import", "web_search"] = "sync"
     interpretation: AIInterpretationResponse
 
 

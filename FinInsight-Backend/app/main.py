@@ -5,8 +5,12 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.v1.articles import router as articles_router
+from app.api.v1.admin import router as admin_router
+from app.api.v1.auth import router as auth_router
 from app.api.v1.health import router as health_router
+from app.api.v1.imports import router as imports_router
 from app.api.v1.sync import router as sync_router
+from app.core.auth import ensure_initial_admin
 from app.core.config import get_settings
 from app.core.database import close_db, init_db
 from app.core.middleware import ProductionMiddleware
@@ -22,6 +26,7 @@ logging.basicConfig(
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     await init_db()
+    await ensure_initial_admin()
     yield
     await close_db()
 
@@ -47,5 +52,8 @@ app.add_middleware(
 
 
 app.include_router(health_router)
+app.include_router(auth_router, prefix="/api/v1")
 app.include_router(articles_router, prefix="/api/v1")
 app.include_router(sync_router, prefix="/api/v1")
+app.include_router(imports_router, prefix="/api/v1")
+app.include_router(admin_router, prefix="/api/v1")

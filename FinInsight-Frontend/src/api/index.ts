@@ -18,6 +18,7 @@ export interface ArticleItem {
   raw_content: string
   url: string
   status?: 'pending' | 'parsed' | 'failed'
+  ingestion_method?: 'sync' | 'url_import' | 'web_search'
   interpretation: AIInterpretation
 }
 
@@ -43,6 +44,29 @@ export interface ArticleChatResponse {
   answer: string
 }
 
+export interface CurrentUser {
+  id: string
+  username: string
+  role: 'user' | 'admin'
+  is_active: boolean
+}
+
+export interface ImportPreview {
+  existing_article_id?: string | null
+  url: string
+  title: string
+  source: string
+  publish_date: string
+  raw_content: string
+}
+
+export interface WebSearchResult {
+  title: string
+  url: string
+  summary: string
+  publish_date: string
+}
+
 function getBaseUrl(): string {
   if (typeof window !== 'undefined') {
     const runtimeApiBaseUrl = (window as any).__FININSIGHT_API_BASE_URL__
@@ -56,11 +80,12 @@ function getBaseUrl(): string {
   return ''
 }
 
-async function request<T>(options: Taro.request.Option): Promise<T> {
+async function request<T>(options: Taro.request.Option, showError = true): Promise<T> {
   try {
     const response = await Taro.request({
       timeout: 15000,
       ...options,
+      credentials: 'include',
       url: `${getBaseUrl()}${options.url}`,
       header: {
         'content-type': 'application/json',
@@ -77,10 +102,12 @@ async function request<T>(options: Taro.request.Option): Promise<T> {
     return response.data as T
   } catch (error) {
     const message = error instanceof Error ? error.message : '网络请求失败'
-    Taro.showToast({
-      title: message,
-      icon: 'none'
-    })
+    if (showError) {
+      Taro.showToast({
+        title: message,
+        icon: 'none'
+      })
+    }
     throw error
   }
 }
@@ -97,6 +124,7 @@ function normalizeArticle(item: Partial<ArticleItem> & Record<string, any>): Art
     raw_content: String(item.raw_content || ''),
     url: String(item.url || ''),
     status: item.status,
+    ingestion_method: item.ingestion_method || 'sync',
     interpretation: {
       id: interpretation.id,
       core_summary: String(interpretation.core_summary || ''),
@@ -106,6 +134,88 @@ function normalizeArticle(item: Partial<ArticleItem> & Record<string, any>): Art
       keywords: Array.isArray(interpretation.keywords) ? interpretation.keywords : []
     }
   }
+}
+
+export async function login(username: string, password: string): Promise<CurrentUser> {
+  return request<CurrentUser>({
+    url: '/api/v1/auth/login',
+    method: 'POST',
+    data: { username, password }
+  })
+}
+
+export async function logout(): Promise<void> {
+  await request<void>({ url: '/api/v1/auth/logout', method: 'POST' }, false)
+}
+
+export async function getCurrentUser(): Promise<CurrentUser | null> {
+  try {
+    return await request<CurrentUser>({ url: '/api/v1/auth/me', method: 'GET' }, false)
+  } catch {
+    return null
+  }
+}
+
+export async function previewImport(url: string): Promise<ImportPreview> {
+  return request<ImportPreview>({
+    url: '/api/v1/imports/preview',
+    method: 'POST',
+    data: { url },
+    timeout: 45000
+  })
+}
+
+export async function confirmImport(
+  preview: ImportPreview,
+  ingestionMethod: 'url_import' | 'web_search'
+): Promise<{ article: ArticleItem; created: boolean }> {
+  const data = await request<{ article: ArticleItem; created: boolean }>({
+    url: '/api/v1/imports/confirm',
+    method: 'POST',
+    data: {
+      ...preview,
+      ingestion_method: ingestionMethod
+    }
+  })
+  return { article: normalizeArticle(data.article), created: data.created }
+}
+
+export async function searchWeb(query: string): Promise<WebSearchResult[]> {
+  const data = await request<{ results: WebSearchResult[] }>({
+    url: '/api/v1/search',
+    method: 'POST',
+    data: { query },
+    timeout: 30000
+  })
+  return data.results || []
+}
+
+export async function getAdminUsers(): Promise<CurrentUser[]> {
+  return request<CurrentUser[]>({ url: '/api/v1/admin/users', method: 'GET' })
+}
+
+export async function createAdminUser(
+  username: string,
+  password: string,
+  role: 'user' | 'admin'
+): Promise<CurrentUser> {
+  return request<CurrentUser>({
+    url: '/api/v1/admin/users',
+    method: 'POST',
+    data: { username, password, role }
+  })
+}
+
+export async function setAdminUserActive(userId: string, isActive: boolean): Promise<CurrentUser> {
+  return request<CurrentUser>({
+    url: `/api/v1/admin/users/${encodeURIComponent(userId)}`,
+    method: 'PATCH',
+    data: { is_active: isActive }
+  })
+}
+
+export async function getAdminSummary(): Promise<{ users: number; active_users: number; articles: number }> {
+  return request({ url: '/api/v1/admin/summary', method: 'GET' })
 }
 
 export async function getArticles(limit = 15, offset = 0): Promise<ArticleItem[]> {

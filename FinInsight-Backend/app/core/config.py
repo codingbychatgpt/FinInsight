@@ -20,6 +20,11 @@ class Settings(BaseSettings):
     openai_model: str = "gpt-4o-mini"
     cors_origins: str = DEFAULT_CORS_ORIGINS
     request_log_enabled: bool = True
+    auth_cookie_name: str = "fininsight_session"
+    auth_cookie_secure: bool = False
+    session_days: int = 30
+    admin_username: str = ""
+    admin_initial_password: str = ""
 
     @property
     def cors_origin_list(self) -> list[str]:

@@ -13,6 +13,8 @@ class PolicyArticle(Document):
     url: Indexed(str, unique=True)
     status: Literal["pending", "parsed", "failed"] = "pending"
     session_id: str | None = None
+    ingestion_method: Literal["sync", "url_import", "web_search"] = "sync"
+    imported_by: str | None = None
 
     class Settings:
         name = "policy_articles"

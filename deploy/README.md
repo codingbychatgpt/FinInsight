@@ -82,12 +82,6 @@ FinInsight-Frontend/dist
 
 ## 生产部署
 
-首次部署前创建同步接口的管理员账号密码：
-
-```bash
-sudo htpasswd -c /etc/nginx/fininsight.htpasswd fininsight-admin
-```
-
 之后执行：
 
 ```bash
@@ -95,7 +89,7 @@ cd /opt/fininsight
 sudo bash deploy/scripts/deploy-production.sh
 ```
 
-同步接口 `/api/v1/sync` 已通过 Nginx Basic Auth 保护。浏览器首次触发同步时需要输入上述管理员账号密码。
+首次部署前必须在 `deploy/.env.production` 中设置 `ADMIN_USERNAME` 和 `ADMIN_INITIAL_PASSWORD`。后端首次启动时会创建初始管理员；管理员登录后可以在管理后台创建普通用户。正式登录体系负责保护同步、文章、导入和管理接口。
 
 ## Docker Compose
 
@@ -163,6 +157,7 @@ sudo certbot renew --dry-run
 - `OPENAI_API_KEY` 是真实可用值。
 - Nginx 已开启 gzip。
 - Docker Compose 中 backend 与 mongo 均为 healthy。
-- `/api/v1/sync` 会要求管理员账号密码。
+- 未登录用户无法访问业务和管理接口。
+- `user` 与 `admin` 角色接口严格隔离。
 - AI 解析与对话接口已启用 Nginx 单 IP 限流。
 - 自动备份 timer 已启用并手动测试成功。

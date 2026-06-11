@@ -175,11 +175,18 @@ http://127.0.0.1:10086
 | 方法 | 路径 | 说明 |
 | --- | --- | --- |
 | GET | `/api/v1/health` | 健康检查 |
+| POST | `/api/v1/auth/login` | 登录 |
+| POST | `/api/v1/auth/logout` | 退出登录 |
+| GET | `/api/v1/auth/me` | 获取当前用户 |
 | GET | `/api/v1/articles` | 获取文章列表 |
 | GET | `/api/v1/articles/{article_id}` | 获取单篇文章，支持详情页刷新和直达 |
 | POST | `/api/v1/sync` | 同步最新资讯 |
 | POST | `/api/v1/articles/{article_id}/analyze` | 对指定文章执行 AI 解析 |
 | POST | `/api/v1/articles/{article_id}/chat` | 围绕指定文章进行 AI 问答 |
+| POST | `/api/v1/search` | 网络搜索新闻候选 |
+| POST | `/api/v1/imports/preview` | 抓取 URL 并生成导入预览 |
+| POST | `/api/v1/imports/confirm` | 确认导入文章 |
+| GET/POST/PATCH | `/api/v1/admin/...` | 管理员专用接口 |
 
 ## 构建与检查
 

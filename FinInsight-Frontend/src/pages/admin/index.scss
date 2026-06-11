@@ -1,0 +1,130 @@
+.adminPage {
+  min-height: 100vh;
+  padding: 24px;
+  background: #060814;
+  color: #e8f1fb;
+}
+
+.adminHeader,
+.adminMetrics,
+.adminGrid,
+.userRow,
+.roleSwitch {
+  display: flex;
+}
+
+.adminHeader,
+.userRow {
+  align-items: center;
+  justify-content: space-between;
+}
+
+.adminEyebrow,
+.adminIdentity,
+.metricLabel,
+.userRole {
+  display: block;
+  color: #8496ac;
+  font-size: 11px;
+}
+
+.adminEyebrow { color: #34d399; }
+
+.adminTitle {
+  display: block;
+  margin-top: 5px;
+  font-size: 30px;
+  font-weight: 800;
+}
+
+.adminIdentity { margin-top: 7px; }
+
+.adminLogout,
+.roleButton,
+.createButton,
+.statusButton {
+  border: 1px solid rgba(148, 163, 184, .2);
+  border-radius: 4px;
+  background: #0c1327;
+  color: #cbd5e1;
+  font-size: 12px;
+}
+
+.adminMetrics {
+  gap: 10px;
+  margin-top: 24px;
+}
+
+.adminMetric {
+  flex: 1;
+  padding: 16px;
+  border: 1px solid rgba(148, 163, 184, .18);
+  background: #0a1022;
+}
+
+.metricValue {
+  display: block;
+  margin-top: 5px;
+  font-size: 24px;
+  font-weight: 800;
+}
+
+.adminGrid {
+  align-items: flex-start;
+  gap: 14px;
+  margin-top: 14px;
+}
+
+.adminPanel {
+  flex: 1;
+  padding: 20px;
+  border: 1px solid rgba(148, 163, 184, .18);
+  background: #0a1022;
+}
+
+.panelTitle {
+  display: block;
+  font-size: 17px;
+  font-weight: 700;
+}
+
+.adminForm,
+.userTable {
+  display: grid;
+  gap: 9px;
+  margin-top: 16px;
+}
+
+.adminInput {
+  width: 100%;
+  height: 40px;
+  padding: 0 12px;
+  border: 1px solid rgba(148, 163, 184, .2);
+  outline: none;
+  background: #070c1b;
+  color: #edf6ff;
+}
+
+.roleSwitch { gap: 7px; }
+.roleButton { flex: 1; }
+.roleActive { border-color: #38bdf8; color: #fff; }
+.createButton { width: 100%; background: #047857; color: #fff; }
+
+.userRow {
+  padding: 11px;
+  border: 1px solid rgba(148, 163, 184, .14);
+  background: #080e1e;
+}
+
+.userName,
+.userRole { display: block; }
+.userRole { margin-top: 4px; color: #38bdf8; }
+.statusActive { color: #6ee7b7; }
+
+@media (max-width: 760px) {
+  .adminPage { padding: 14px; }
+  .adminGrid,
+  .adminMetrics { flex-direction: column; }
+  .adminMetric,
+  .adminPanel { width: 100%; }
+}

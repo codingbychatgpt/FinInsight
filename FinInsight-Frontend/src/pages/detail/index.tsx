@@ -4,6 +4,7 @@ import { Button, Text, View } from '@tarojs/components'
 
 import { analyzeArticle, askArticleQuestion, ArticleItem, getArticle } from '../../api'
 import { getCurrentArticle, setCurrentArticle } from '../../store/article'
+import { useAuthGuard } from '../../hooks/useAuthGuard'
 
 import './index.scss'
 
@@ -79,6 +80,7 @@ function isAnalysisFailed(article: ArticleItem): boolean {
 }
 
 export default function DetailPage() {
+  const { checking } = useAuthGuard('user')
   const [analyzing, setAnalyzing] = useState<boolean>(false)
   const [article, setArticle] = useState<ArticleItem | null>(() => getCurrentArticle())
   const [leaving, setLeaving] = useState<boolean>(false)
@@ -89,6 +91,9 @@ export default function DetailPage() {
   const [loadingArticle, setLoadingArticle] = useState<boolean>(() => getCurrentArticle() === null)
 
   useEffect(() => {
+    if (checking) {
+      return
+    }
     if (article) {
       setLoadingArticle(false)
       return
@@ -126,7 +131,7 @@ export default function DetailPage() {
     return () => {
       active = false
     }
-  }, [article])
+  }, [article, checking])
 
   const goHome = () => {
     Taro.reLaunch({
@@ -139,6 +144,10 @@ export default function DetailPage() {
     setTimeout(() => {
       goHome()
     }, 180)
+  }
+
+  if (checking) {
+    return <View className='detailPage'><View className='empty'><Text>验证登录状态...</Text></View></View>
   }
 
   if (!article) {

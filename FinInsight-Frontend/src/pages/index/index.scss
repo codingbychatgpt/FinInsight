@@ -121,6 +121,44 @@ $ease-premium: cubic-bezier(0.16, 1, 0.3, 1);
   gap: 14px;
 }
 
+.headerTopline,
+.userToolbar {
+  display: flex;
+  align-items: center;
+}
+
+.headerTopline {
+  justify-content: space-between;
+  gap: 18px;
+}
+
+.userToolbar {
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.userIdentity {
+  color: #7dd3fc;
+  font-size: 11px;
+}
+
+.headerToolButton {
+  width: auto;
+  height: 30px;
+  padding: 0 11px;
+  border: 1px solid rgba(125, 211, 252, 0.25);
+  border-radius: 4px;
+  background: rgba(8, 15, 31, 0.7);
+  color: #dbeafe;
+  font-size: 11px;
+  line-height: 28px;
+}
+
+.authChecking {
+  padding: 40px;
+  color: #94a3b8;
+}
+
 .title {
   color: #f8fafc;
   font-size: 58px;
@@ -1205,6 +1243,11 @@ $ease-premium: cubic-bezier(0.16, 1, 0.3, 1);
   .header {
     min-height: 176px;
     padding: 24px;
+  }
+
+  .headerTopline {
+    align-items: flex-start;
+    flex-direction: column;
   }
 
   .headerStats {
